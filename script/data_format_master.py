@@ -78,22 +78,31 @@ def extract_and_format_date(name):
     # YYMMDD 形式（スペースなし）を検出
     yymmdd_pattern = re.compile(r"(\d{2})(\d{2})(\d{2})")
 
-    match = yyyy_mm_dd_pattern.search(name) or yy_mm_dd_pattern.search(name)
+    match = yyyy_mm_dd_pattern.search(name)
+    if match:
+        year, month, day = match.groups()
+    else:
+        match = yy_mm_dd_pattern.search(name)
+        if match:
+            year, month, day = match.groups()
+            # 年を2000年代として解釈
+            year = f"20{year}"
+            # 日付フォーマットの誤解釈を防ぐための確認
+            if int(month) > 12:
+                month, day = day, month  # 月と日を交換
+
     if not match:
         match = yymmdd_pattern.search(name)
         if match:
             year, month, day = match.groups()
             year = f"20{year}"
-    else:
-        year, month, day = match.groups()
-        if len(year) == 2:
-            year = f"20{year}"
 
     if match:
+        # 月と日を2桁に整形
         month = month.zfill(2)
         day = day.zfill(2)
         return f"{year}/{month}/{day}"
-    return ""
+    return name  # 変換できない場合は元の文字列を返す
 
 
 # YYYY/MM/DD形式の日付を識別する正規表現パターン
@@ -132,67 +141,55 @@ def extract_and_format_date_correctly(row):
             return formatted_date
     return row["Date"]
 
+def format_date_in_text(text):
+    # YYYY/MM/DD や YY/MM/DD 形式の日付を識別する正規表現
+    date_pattern = re.compile(r'(\d{2,4}/\d{1,2}/\d{1,2})')
+
+    # 日付の前後にスペースを挿入
+    formatted_text = re.sub(date_pattern, r' \1 ', text)
+
+    # 連続するスペースを一つに縮小
+    formatted_text = re.sub(r'\s+', ' ', formatted_text).strip()
+
+    return formatted_text
+
 
 # 処理の実行
 df = json_to_dataframe(json_file_path)
+
+# 'Name_Copy'列を追加し、'Name'列の値をコピー
+df["Name_Copy"] = df["Name"]
+
+df["Name_Copy"] = df["Name_Copy"].apply(format_date_in_text)
+
 # 'Name'列の日付の形式を変更
-df["Name"] = df["Name"].apply(format_date_with_default_year)
+# df["Name_Copy"] = df["Name_Copy"].apply(format_date_with_default_year)
 
 # 'Name'列の各レコードに対して置換処理を適用
-df["Name"] = df["Name"].apply(replace_mm_dd_with_year)
+# df["Name_Copy"] = df["Name_Copy"].apply(replace_mm_dd_with_year)
 
 # 他の条件に基づいてピンNoを割り当てる処理
 conditions = [
-    df["Name"].str.contains("もうすぐ完成"),
-    df["Name"].str.contains("棟中") & df["Name"].str.contains("契約"),
-    df["Name"].str.contains("もうすぐ"),
-    df["Name"].str.contains("タイミングIK"),
-    df["Name"].str.contains("タイミング"),
-    df["Name"].str.contains("不在熱い"),
-    df["Name"].str.contains("ik|IK|iK|Ik|ｉｋ|ＩＫ|Ｉｋ|ｉＫ"),
-    df["Name"].str.contains("済み|設置済み|設置済"),
-    df["Name"].str.contains("再訪不可|危険"),
-    df["Name"].str.contains("不在") & ~df["Name"].str.contains("不在熱い"),
-    df["Name"].str.contains("浮"),
-    df["Name"].str.contains("顧客"),
-    df["Name"].str.contains("商談外し|APキャン|アポキャン"),
-    df["Name"].str.contains("アポ|AP"),
-    df["Name"].str.contains(r"\b\d{2,4}/\d{1,2}/\d{1,2}\b$"),
-    df["Name"].str.contains(r"\d{2}/\d{1,2}/\d{1,2}.*(建設中|土間|棟)"),
-    df["Name"].str.contains(r"\d{2}/\d{1,2}/\d{1,2}"),  # yyyy/mm/dd 形式の日付を検出
+    df["Name_Copy"].str.contains("もうすぐ完成"),
+    df["Name_Copy"].str.contains("棟中|棟契約|棟成約"),
+    df["Name_Copy"].str.contains("もうすぐ"),
+    df["Name_Copy"].str.contains("タイミングIK"),
+    df["Name_Copy"].str.contains("タイミング"),
+    df["Name_Copy"].str.contains("不在熱い"),
+    df["Name_Copy"].str.contains("ik|IK|iK|Ik|ｉｋ|ＩＫ|Ｉｋ|ｉＫ"),
+    df["Name_Copy"].str.contains("済み|設置済み|設置済|済"),
+    df["Name_Copy"].str.contains("再訪不可|危険"),
+    df["Name_Copy"].str.contains("不在") & ~df["Name_Copy"].str.contains("不在熱い"),
+    df["Name_Copy"].str.contains("浮"),
+    df["Name_Copy"].str.contains("顧客"),
+    df["Name_Copy"].str.contains("商談外し|APキャン|アポキャン"),
+    df["Name_Copy"].str.contains("アポ|AP"),
+    df["Name_Copy"].str.contains("断"),
+    df["Name_Copy"].str.contains(r"\b\d{2,4}/\d{1,2}/\d{1,2}\b$"),
+    df["Name_Copy"].str.contains(r"\d{2}/\d{1,2}/\d{1,2}.*(建設中|土間)"),
 ]
 
-choices = [13, 12, 12, 1, 1, 7, 5, 16, 6, 2, 9, 8, 10, 4, 13, 13, 13]  # 各条件に対応するピンNo
-
-# 他の条件に基づいてピンNoを割り当てる処理2
-# conditions = [
-#     df["Name"].str.contains("再訪不可|危険"),
-#     df["Name"].str.contains("もうすぐ"),
-#     df["Name"].str.contains("不在熱|タイミングIK"),
-#     df["Name"].str.contains("不在") & ~df["Name"].str.contains("不在熱"),
-#     df["Name"].str.contains("タイミング"),
-#     df["Name"].str.contains("済|済み"),
-#     df["Name"].str.contains("ik|IK|iK|Ik|ｉｋ|ＩＫ|Ｉｋ|ｉＫ"),
-#     df["Name"].str.contains(r"\b\d{2,4}/\d{1,2}/\d{1,2}\b$"),
-#     df["Name"].str.contains(r"\d{2}/\d{1,2}/\d{1,2}.*(建設中|土間|棟)"),
-#     df["Name"].str.contains(r"\d{2}/\d{1,2}/\d{1,2}"),  # yyyy/mm/dd 形式の日付を検出
-# ]
-
-# choices = [6, 12, 7, 2, 1, 16, 5, 13, 13, 17]  # 各条件に対応するピンNo
-
-# 他の条件に基づいてピンNoを割り当てる処理1
-# conditions = [
-#     df['Name'].str.contains('再訪不可|危険'),
-#     df['Name'].str.contains('もうすぐ'),
-#     df['Name'].str.contains('不在熱|タイミングIK'),
-#     df['Name'].str.contains('不在') & ~df['Name'].str.contains('不在熱'),
-#     df['Name'].str.contains('タイミング'),
-#     df['Name'].str.contains('済|済み'),
-#     df['Name'].str.contains('ik|IK|iK|Ik|ｉｋ|ＩＫ|Ｉｋ|ｉＫ'),
-#     df['Name'].str.contains(r'\d{2}/\d{1,2}/\d{1,2}')  # yyyy/mm/dd 形式の日付を検出
-# ]
-
-# choices = [6, 12, 7, 2, 1, 16, 5, 13]  # 各条件に対応するピンNo
+choices = [13, 12, 12, 1, 1, 7, 5, 16, 6, 2, 9, 8, 10, 4, 3, 13, 13]  # 各条件に対応するピンNo
 
 # np.selectを使って条件に基づいてピンNoを更新
 df["pin_no"] = np.select(conditions, choices, default=17)
@@ -204,7 +201,7 @@ print(pin_counts)
 print(f"合計: {total}")
 
 # 'Date'列を追加し、'Name'列から日付を抽出してフォーマット
-df["Date"] = df["Name"].apply(extract_and_format_date)
+df["Date"] = df["Name_Copy"].apply(extract_and_format_date)
 
 # 'mpid'列を追加し、1から始まる連番を割り振る
 df["mpid"] = range(1, len(df) + 1)
@@ -215,33 +212,33 @@ df["Date"] = df.apply(extract_date_if_missing, axis=1)
 # DataFrame全体に適用
 df["Date"] = df.apply(extract_and_format_date_correctly, axis=1)
 
-# 'mpid'が7以外かつ'Date'が空のレコードをフィルタリング
-filtered_df = df[(df["pin_no"] != 16) & (df["Date"].isna() | (df["Date"] == ""))]
+# # 'mpid'が7以外かつ'Date'が空のレコードをフィルタリング
+# filtered_df = df[(df["pin_no"] != 16) & (df["Date"].isna() | (df["Date"] == ""))]
 
-# フィルタリングされたレコードの表示
-print(filtered_df)
+# # フィルタリングされたレコードの表示
+# print(filtered_df)
 
 # 必要に応じてフィルタリングされたレコードからピンNoが-1のレコードを削除して、新しいCSVファイルに出力
-filtered_df = filtered_df[filtered_df["pin_no"] != -1]
-filtered_df.to_csv(
-    "C:\\Users\\14nn0\\works_new\\あおいホーム様\\支店別フォーマットデータ\\3支店データ\\filtered.csv",
-    index=False,
-    encoding="utf-8-sig",
-)
+# filtered_df = filtered_df[filtered_df["pin_no"] != -1]
+# filtered_df.to_csv(
+#     "C:\\Users\\14nn0\\works_new\\あおいホーム様\\支店別フォーマットデータ\\3支店データ\\filtered.csv",
+#     index=False,
+#     encoding="utf-8-sig",
+# )
 
-# 'pin_no'が13のレコードをCSVに出力
-df[df["pin_no"] == 13].to_csv(
-    "C:\\Users\\14nn0\\works_new\\あおいホーム様\\支店別フォーマットデータ\\3支店データ\\pin_no_13.csv",
-    index=False,
-    encoding="utf-8-sig",
-)
+# # 'pin_no'が13のレコードをCSVに出力
+# df[df["pin_no"] == 13].to_csv(
+#     "C:\\Users\\14nn0\\works_new\\あおいホーム様\\支店別フォーマットデータ\\3支店データ\\pin_no_13.csv",
+#     index=False,
+#     encoding="utf-8-sig",
+# )
 
-# 'pin_no'が17のレコードをCSVに出力
-df[df["pin_no"] == 17].to_csv(
-    "C:\\Users\\14nn0\\works_new\\あおいホーム様\\支店別フォーマットデータ\\3支店データ\\pin_no_17.csv",
-    index=False,
-    encoding="utf-8-sig",
-)
+# # 'pin_no'が17のレコードをCSVに出力
+# df[df["pin_no"] == 17].to_csv(
+#     "C:\\Users\\14nn0\\works_new\\あおいホーム様\\支店別フォーマットデータ\\3支店データ\\pin_no_17.csv",
+#     index=False,
+#     encoding="utf-8-sig",
+# )
 
 # 最終的なCSVファイルにデータフレームを出力
 df.to_csv(final_csv_path, index=False, encoding="utf-8-sig")
