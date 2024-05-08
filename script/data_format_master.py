@@ -8,8 +8,6 @@ import json
 import pandas as pd
 import numpy as np
 import re
-from dateutil import parser
-from datetime import datetime
 
 # JSONファイルのパス
 json_file_path = (
@@ -33,40 +31,6 @@ def json_to_dataframe(json_path):
         for feature in json_data["features"]
     ]
     return pd.DataFrame(data)
-
-
-# 年が含まれていない日付にデフォルトの年を追加する関数
-def format_date_with_default_year(date_str, default_year=2023):
-    try:
-        # 日付を解析する
-        dt = parser.parse(date_str)
-
-        # 年が明示されていない場合、デフォルトの年を使用
-        if dt.year == datetime.now().year:
-            dt = dt.replace(year=default_year)
-
-        # yyyy/mm/dd 形式にフォーマットする
-        return dt.strftime("%Y/%m/%d")
-    except ValueError:
-        # 日付として解析できない場合は元の文字列を返す
-        return date_str
-
-
-# MM/DD形式の日付を識別し、23/MM/DD形式に置換する正規表現パターン
-mm_dd_pattern = re.compile(r"\b(\d{1,2})/(\d{1,2})\b")
-
-
-def replace_mm_dd_with_year(name):
-    # MM/DD形式の日付を23/MM/DD形式に置換する関数
-    def replace_match(match):
-        # MM/DD形式の日付を23/MM/DD形式に置換
-        return f"23/{match.group(1)}/{match.group(2)}"
-
-    # 'YY/MM/DD' 形式を除外するため、先にチェック
-    if not re.search(r"\d{2,4}/\d{1,2}/\d{1,2}", name):
-        # MM/DD形式を検出し、23/MM/DD形式に置換
-        return mm_dd_pattern.sub(replace_match, name)
-    return name
 
 
 # YYYY/MM/DD、YY/MM/DD、YYMMDD 形式の日付を識別し、YYYY/MM/DD形式に変換する関数
@@ -162,12 +126,6 @@ df["Name_Copy"] = df["Name"]
 
 df["Name_Copy"] = df["Name_Copy"].apply(format_date_in_text)
 
-# 'Name'列の日付の形式を変更
-# df["Name_Copy"] = df["Name_Copy"].apply(format_date_with_default_year)
-
-# 'Name'列の各レコードに対して置換処理を適用
-# df["Name_Copy"] = df["Name_Copy"].apply(replace_mm_dd_with_year)
-
 # 他の条件に基づいてピンNoを割り当てる処理
 conditions = [
     df["Name_Copy"].str.contains("もうすぐ完成"),
@@ -211,34 +169,6 @@ df["Date"] = df.apply(extract_date_if_missing, axis=1)
 
 # DataFrame全体に適用
 df["Date"] = df.apply(extract_and_format_date_correctly, axis=1)
-
-# # 'mpid'が7以外かつ'Date'が空のレコードをフィルタリング
-# filtered_df = df[(df["pin_no"] != 16) & (df["Date"].isna() | (df["Date"] == ""))]
-
-# # フィルタリングされたレコードの表示
-# print(filtered_df)
-
-# 必要に応じてフィルタリングされたレコードからピンNoが-1のレコードを削除して、新しいCSVファイルに出力
-# filtered_df = filtered_df[filtered_df["pin_no"] != -1]
-# filtered_df.to_csv(
-#     "C:\\Users\\14nn0\\works_new\\あおいホーム様\\支店別フォーマットデータ\\3支店データ\\filtered.csv",
-#     index=False,
-#     encoding="utf-8-sig",
-# )
-
-# # 'pin_no'が13のレコードをCSVに出力
-# df[df["pin_no"] == 13].to_csv(
-#     "C:\\Users\\14nn0\\works_new\\あおいホーム様\\支店別フォーマットデータ\\3支店データ\\pin_no_13.csv",
-#     index=False,
-#     encoding="utf-8-sig",
-# )
-
-# # 'pin_no'が17のレコードをCSVに出力
-# df[df["pin_no"] == 17].to_csv(
-#     "C:\\Users\\14nn0\\works_new\\あおいホーム様\\支店別フォーマットデータ\\3支店データ\\pin_no_17.csv",
-#     index=False,
-#     encoding="utf-8-sig",
-# )
 
 # 最終的なCSVファイルにデータフレームを出力
 df.to_csv(final_csv_path, index=False, encoding="utf-8-sig")
